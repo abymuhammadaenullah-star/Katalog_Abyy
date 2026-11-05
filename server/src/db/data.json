@@ -1,0 +1,134 @@
+{
+    "settings": {
+        "storeName": "Byy Bike",
+        "tagline": "Solusi Ketika Mau Motor Ganteng",
+        "phone": "6285863674608",
+        "address": "Jl. Gelora Bung Karno No.5, Jakarta",
+        "currenty": "Rp",
+        "activeWhatsApp": true
+    },
+    "admin": {
+        "id": "admin-1",
+        "name": "Owner Toko Byy Bike",
+        "email": "admin@katalogwa.com",
+        "password": "-"
+    },
+    "categories": [
+        {
+            "id": "cat-1",
+            "name": "Sparepart Motor",
+            "slig": "sparepart motor"
+        },
+        {
+            "id": "cat-2",
+            "name": "Ban FDR",
+            "slig": "ban fdr"
+        },
+        {
+            "id": "cat-3",
+            "name": "Oli",
+            "slig": "oli"
+        }
+    ],
+    "products": [
+        {
+            "id": "prod-1",
+            "name": "ECU Juken",
+            "categoryId": "cat-1",
+            "categoryName": "Sparepart Motor",
+            "price": 10000000,
+            "stokStatus": "Tersedia",
+            "description": "Ecu Juken dengan racikan offended",
+            "image": "-",
+            "createdAt": "2026-10-19T15:57:55.66SZ"
+        },
+        {
+            "id": "prod-2",
+            "name": "ROller 9gram Daitona",
+            "categoryId": "cat-1",
+            "categoryName": "Sparepart Motor",
+            "price": 200000,
+            "stokStatus": "Tersedia",
+            "description": "Roller 9gram Daitona cocok untuk menambah speed",
+            "image": "-",
+            "createdAt": "2026-10-19T15:57:55.66SZ"
+        },
+        {
+            "id": "prod-3",
+            "name": "Rumah Roler Daitona",
+            "categoryId": "cat-1",
+            "categoryName": "Sparepart Motor",
+            "price": 200000,
+            "stokStatus": "Tersedia",
+            "description": "Rumah Roler Daitona cocok untuk menambah speed",
+            "image": "-",
+            "createdAt": "2026-10-19T15:57:55.66SZ"
+        },
+        {
+            "id": "prod-4",
+            "name": "Per Otomatis Daitona",
+            "categoryId": "cat-1",
+            "categoryName": "Sparepart Motor",
+            "price": 10000,
+            "stokStatus": "Tersedia",
+            "description": "Per Otomatis Daitona cocok untuk menambah speed",
+            "image": "-",
+            "createdAt": "2026-10-19T15:57:55.66SZ"
+        },
+        {
+            "id": "prod-5",
+            "name": "Kampas Ganda Daitona",
+            "categoryId": "cat-1",
+            "categoryName": "Sparepart Motor",
+            "price": 200000,
+            "stokStatus": "Tersedia",
+            "description": "Kampas Ganda Daitona cocok untuk menambah speed",
+            "image": "-",
+            "createdAt": "2026-10-19T15:57:55.66SZ"
+        },
+        {
+            "id": "prod-6",
+            "name": "Mangkok Otomatis Daitona",
+            "categoryId": "cat-1",
+            "categoryName": "Sparepart Motor",
+            "price": 200000,
+            "stokStatus": "Tersedia",
+            "description": "Mangkok Otomatis Daitona cocok untuk menambah speed",
+            "image": "-",
+            "createdAt": "2026-10-19T15:57:55.66SZ"
+        },
+        {
+            "id": "prod-7",
+            "name": "V-Belt Daitona",
+            "categoryId": "cat-1",
+            "categoryName": "Sparepart Motor",
+            "price": 250000,
+            "stokStatus": "Tersedia",
+            "description": "V-Belt Daitona cocok untuk menambah speed",
+            "image": "-",
+            "createdAt": "2026-10-19T15:57:55.66SZ"
+        },
+        {
+            "id": "prod-8",
+            "name": "Kaliper Brembo",
+            "categoryId": "cat-1",
+            "categoryName": "Sparepart Motor",
+            "price": 1000000,
+            "stokStatus": "Tersedia",
+            "description": "Kaliper Brembo sangat membantu untuk pengereman anda sekaligus looknya jadi keliatan bagus",
+            "image": "-",
+            "createdAt": "2026-10-19T15:57:55.66SZ"
+        },
+        {
+            "id": "prod-9",
+            "name": "Shock Belakang RCB",
+            "categoryId": "cat-1",
+            "categoryName": "Sparepart Motor",
+            "price": 500000,
+            "stokStatus": "Tersedia",
+            "description": "Shock RCB membantu kenyamanan berkendara anda",
+            "image": "-",
+            "createdAt": "2026-10-19T15:57:55.66SZ"
+        }
+    ]
+}

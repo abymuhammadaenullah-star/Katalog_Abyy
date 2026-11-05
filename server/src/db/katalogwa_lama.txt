@@ -1,0 +1,3 @@
+SELECT name, price, stock_status
+FROM products
+WHERE stock_status = 'Tersedia';

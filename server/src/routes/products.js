@@ -32,7 +32,7 @@ const upload = multer({
     fileFilter: (req, file, cb) => {
         const allowed = /jpeg|jpg|png|webp|gif/;
         const ext = allowed.test(path.extname(file.originalname).toLowerCase());
-        const mime = allowed.test(file.mimetpye);
+        const mime = allowed.test(file.mimetype);
         if (ext && mime) {
             return cb(null, true);
         }
@@ -44,8 +44,9 @@ const router = express.Router();
 
 // GET all products with filtering & search (public)
 router.get('/', (req, res) => {
-    const { categoryId, search, stokStatus } = req.query;
-    const products = db.getProducts({ categoryId, search, stokStatus });
+    const { categoryId, search } = req.query;
+    const stockStatus = req.query.stockStatus || req.query.stokStatus;
+    const products = db.getProducts({ categoryId, search, stockStatus });
 
     res.json({
         success: true,
@@ -65,7 +66,8 @@ router.get('/:id', (req, res) => {
 
 // POST Create product (admin protected)
 router.post('/', authenticateToken, upload.single('photo'), (req, res) => {
-    const { name, categoryId, price, stokStatus, description, imageUrl } = req.body;
+    const { name, categoryId, price, description, imageUrl } = req.body;
+    const stockStatus = req.body.stockStatus || req.body.stokStatus;
 
     if (!name || !name.trim()) {
         return res.status(400).json({ success: false, message: 'Nama produk wajib diisi' });
@@ -86,7 +88,7 @@ router.post('/', authenticateToken, upload.single('photo'), (req, res) => {
         name: name.trim(),
         categoryId,
         price: Number(price),
-        stokStatus: stokStatus || 'Tersedia',
+        stockStatus: stockStatus || 'Tersedia',
         description: description ? description.trim() : '',
         image: finalImage || ''
     });
@@ -101,7 +103,8 @@ router.post('/', authenticateToken, upload.single('photo'), (req, res) => {
 // PUT update product (admin protected)
 router.put('/:id', authenticateToken, upload.single('photo'), (req, res) => {
     const { id } = req.params;
-    const { name, categoryId, price, stokStatus, description, imageUrl } = req.body;
+    const { name, categoryId, price, description, imageUrl } = req.body;
+    const stockStatus = req.body.stockStatus ?? req.body.stokStatus;
 
     const existing = db.getProductById(id);
     if (!existing) {
@@ -112,7 +115,7 @@ router.put('/:id', authenticateToken, upload.single('photo'), (req, res) => {
     if (name !== undefined) updatePayload.name = name.trim();
     if (categoryId !== undefined) updatePayload.categoryId = categoryId;
     if (price !== undefined) updatePayload.price = Number(price);
-    if (stokStatus !== undefined) updatePayload.stokStatus = stokStatus;
+    if (stockStatus !== undefined) updatePayload.stockStatus = stockStatus;
     if (description !== undefined) updatePayload.description = description.trim();
 
     if (req.file) {
