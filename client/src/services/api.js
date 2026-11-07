@@ -291,6 +291,18 @@ export const updateOrderStatus = async (id, status) => {
     return handleResponse(res);
 };
 
+export const deleteOrder = async (id) => {
+    const res = await fetch(
+        `${API_BASE}/orders/${encodeURIComponent(id)}`,
+        {
+            method: 'DELETE',
+            headers: getHeaders()
+        }
+    );
+
+    return handleResponse(res);
+};
+
 
 // ==========================================
 // AUTH
