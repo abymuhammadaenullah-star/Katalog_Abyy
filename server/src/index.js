@@ -29,8 +29,10 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Serve static uploaded files
-const uploadsPath = path.join(__dirname, 'uploads/images');
-app.use('/uploads', express.static(uploadsPath));
+// Static folder untuk gambar produk
+app.use('/uploads', express.static(
+    path.join(__dirname, 'uploads/images')
+));
 
 // API Route
 app.use('/api/auth', authRoutes);
