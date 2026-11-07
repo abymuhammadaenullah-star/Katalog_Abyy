@@ -59,7 +59,7 @@ export const AdminLoginModal = ({ isOpen, onClose, onSuccess }) => {
             </div>
             <div>
               <h2 className="modal-title">Login Admin Store</h2>
-              <p className="modal-subtitle">Kelola produk & kategori KatalogWA</p>
+              <p className="modal-subtitle">Kelola produk & kategori BYY MOTORCYCLE</p>
             </div>
           </div>
           <button className="btn-icon" onClick={onClose} title="Tutup">

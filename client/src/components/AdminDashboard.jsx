@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import Logo from '../assets/BYY Motorcycle Racing Emblem.png';
 import {
   Package,
   Layers,
@@ -20,32 +21,55 @@ import {
   Menu,
   X,
   ChevronRight,
-  ShieldCheck
+  ShieldCheck,
+  UserRound,
+  ClipboardList,
+  RefreshCw
 } from 'lucide-react';
 import { ProductFormModal } from './ProductFormModal';
 import { ConfirmModal } from './ConfirmModal';
+import { DEFAULT_PRODUCT_IMAGE, getProductImageUrl } from '../services/productImages';
 import {
   createProduct,
   updateProduct,
-  toggleProductStock,
   deleteProduct,
   createCategory,
   updateCategory,
   deleteCategory,
-  updateStoreSettings
+  updateStoreSettings,
+  updateAdminProfile,
+  fetchOrders,
+  updateOrderStatus,
+  deleteOrder
 } from '../services/api';
+
+const ORDER_STATUSES = [
+  'Menunggu Konfirmasi',
+  'Diproses',
+  'Dikirim',
+  'Selesai',
+  'Dibatalkan',
+];
 
 export const AdminDashboard = ({
   products,
   categories,
   storeSettings,
   adminUser,
+  onAdminProfileUpdated,
   onRefreshData,
   onBackToCatalog,
   onLogout
 }) => {
-  const [activeTab, setActiveTab] = useState('products'); // 'products' | 'categories' | 'settings'
+  const [activeTab, setActiveTab] = useState('products');
   const [isSidebarOpenMobile, setIsSidebarOpenMobile] = useState(false);
+  const [orders, setOrders] = useState([]);
+  const [deletingOrder, setDeletingOrder] = useState(null);
+  const [isLoadingOrders, setIsLoadingOrders] = useState(false);
+  const [savingOrderId, setSavingOrderId] = useState('');
+  const [ordersError, setOrdersError] = useState('');
+  const [orderSearch, setOrderSearch] = useState('');
+  const [orderStatusFilter, setOrderStatusFilter] = useState('');
 
   // Product states
   const [productSearch, setProductSearch] = useState('');
@@ -53,6 +77,7 @@ export const AdminDashboard = ({
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [deletingProduct, setDeletingProduct] = useState(null);
+  const [productSuccess, setProductSuccess] = useState('');
 
   // Category states
   const [newCatName, setNewCatName] = useState('');
@@ -64,11 +89,21 @@ export const AdminDashboard = ({
   // Settings states
   const [settingsForm, setSettingsForm] = useState({
     storeName: storeSettings?.storeName || '',
+    ownerName: storeSettings?.ownerName || '',
     tagline: storeSettings?.tagline || '',
     phone: storeSettings?.phone || '',
     address: storeSettings?.address || ''
   });
   const [settingsSuccess, setSettingsSuccess] = useState(false);
+  const [profileForm, setProfileForm] = useState({
+    name: adminUser?.name || '',
+    email: adminUser?.email || '',
+    currentPassword: '',
+    newPassword: ''
+  });
+  const [profileError, setProfileError] = useState('');
+  const [profileSuccess, setProfileSuccess] = useState('');
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   // Currency Formatter
   const formatRupiah = (num) => {
@@ -93,6 +128,71 @@ export const AdminDashboard = ({
   const availableCount = products.filter((p) => p.stockStatus === 'Tersedia').length;
   const outCount = totalCount - availableCount;
 
+  const filteredOrders = orders.filter((order) => {
+    const matchesStatus = !orderStatusFilter || order.status === orderStatusFilter;
+    const searchText = [
+      order.id,
+      order.customerName,
+      order.customerPhone,
+      order.customerNotes,
+      ...order.items.map((item) => item.productName),
+    ].join(' ').toLowerCase();
+    return matchesStatus && (!orderSearch || searchText.includes(orderSearch.toLowerCase()));
+  });
+
+  const loadOrders = async () => {
+    setIsLoadingOrders(true);
+    setOrdersError('');
+    try {
+      const response = await fetchOrders();
+      setOrders(response.data || []);
+    } catch (error) {
+      setOrdersError(error.message || 'Gagal memuat riwayat pemesanan.');
+    } finally {
+      setIsLoadingOrders(false);
+    }
+  };
+
+  const handleOpenOrders = () => {
+    setActiveTab('orders');
+    setIsSidebarOpenMobile(false);
+    loadOrders();
+  };
+
+  const handleOrderStatusChange = async (orderId, status) => {
+    setSavingOrderId(orderId);
+    setOrdersError('');
+    try {
+      const response = await updateOrderStatus(orderId, status);
+      setOrders((currentOrders) =>
+        currentOrders.map((order) => order.id === orderId ? response.data : order)
+      );
+    } catch (error) {
+      setOrdersError(error.message || 'Gagal memperbarui status pesanan.');
+    } finally {
+      setSavingOrderId('');
+    }
+  };
+
+  const handleConfirmDeleteOrder = async () => {
+    if (!deletingOrder) return;
+    setOrdersError('');
+    try {
+      await deleteOrder(deletingOrder.id);
+      setOrders((currentOrders) =>
+        currentOrders.filter((order) => order.id !== deletingOrder.id)
+      );
+      setDeletingOrder(null);
+    } catch (error) {
+      setOrdersError(error.message || 'Gagal menghapus riwayat pesanan.');
+    }
+  };
+
+  const formatOrderDate = (value) => {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? value : date.toLocaleString('id-ID');
+  };
+
   // --- Handlers: Product Management ---
   const handleOpenAddProduct = () => {
     setEditingProduct(null);
@@ -105,21 +205,14 @@ export const AdminDashboard = ({
   };
 
   const handleSaveProduct = async (payload, id) => {
+    setProductSuccess('');
     if (id) {
       await updateProduct(id, payload);
     } else {
       await createProduct(payload);
     }
     await onRefreshData();
-  };
-
-  const handleToggleStock = async (id) => {
-    try {
-      await toggleProductStock(id);
-      await onRefreshData();
-    } catch (err) {
-      alert(`Gagal mengubah stok: ${err.message}`);
-    }
+    setProductSuccess(id ? 'Produk berhasil diperbarui.' : 'Produk berhasil ditambahkan.');
   };
 
   const handleConfirmDeleteProduct = async () => {
@@ -181,12 +274,44 @@ export const AdminDashboard = ({
   const handleSaveSettings = async (e) => {
     e.preventDefault();
     try {
-      await updateStoreSettings(settingsForm);
+      const response = await updateStoreSettings(settingsForm);
+      if (response?.data) {
+        setSettingsForm({
+          storeName: response.data.storeName || '',
+          ownerName: response.data.ownerName || '',
+          tagline: response.data.tagline || '',
+          phone: response.data.phone || '',
+          address: response.data.address || ''
+        });
+      }
       setSettingsSuccess(true);
       await onRefreshData();
       setTimeout(() => setSettingsSuccess(false), 3000);
     } catch (err) {
       alert(`Gagal menyimpan pengaturan: ${err.message}`);
+    }
+  };
+
+  const handleSaveAdminProfile = async (e) => {
+    e.preventDefault();
+    setProfileError('');
+    setProfileSuccess('');
+    setIsSavingProfile(true);
+
+    try {
+      const response = await updateAdminProfile(profileForm);
+      onAdminProfileUpdated(response);
+      setProfileForm({
+        name: response.user.name,
+        email: response.user.email,
+        currentPassword: '',
+        newPassword: ''
+      });
+      setProfileSuccess('Profil admin berhasil diperbarui.');
+    } catch (err) {
+      setProfileError(err.message || 'Gagal memperbarui profil admin.');
+    } finally {
+      setIsSavingProfile(false);
     }
   };
 
@@ -206,12 +331,13 @@ export const AdminDashboard = ({
       <aside className={`admin-sidebar ${isSidebarOpenMobile ? 'open' : ''}`}>
         {/* Sidebar Header / Brand */}
         <div className="sidebar-brand">
-          <div className="sidebar-brand-icon">
-            <ShoppingBag size={22} color="#ffffff" />
+          <div className="sidebar-brand">
+            <img src={Logo} width={36} style={{ borderRadius: '10%' }} height={36} alt="Logo BYY Motorcycle Racing" />
+            {/* <ShoppingBag size={22} color="#ffffff" /> */}
           </div>
           <div className="sidebar-brand-text">
-            <div className="sidebar-brand-title">KatalogWA</div>
-            <div className="sidebar-brand-badge">Admin Back-Office</div>
+            <div className="sidebar-brand-title">{storeSettings?.storeName || 'BYY MOTORCYCLE'}</div>
+            <div className="sidebar-brand-badge">{adminUser.name || storeSettings?.ownerName || 'Admin Toko'}</div>
           </div>
           <button
             className="sidebar-close-mobile"
@@ -246,6 +372,16 @@ export const AdminDashboard = ({
           </button>
 
           <button
+            className={`sidebar-nav-item ${activeTab === 'orders' ? 'active' : ''}`}
+            onClick={handleOpenOrders}
+            id="sidebar-link-orders"
+          >
+            <ClipboardList size={18} />
+            <span className="nav-item-label">Riwayat Pemesanan</span>
+            <span className="nav-badge-count">{orders.length}</span>
+          </button>
+
+          <button
             className={`sidebar-nav-item ${activeTab === 'categories' ? 'active' : ''}`}
             onClick={() => {
               setActiveTab('categories');
@@ -270,6 +406,18 @@ export const AdminDashboard = ({
             <span className="nav-item-label">Pengaturan Toko & WA</span>
           </button>
 
+          <button
+            className={`sidebar-nav-item ${activeTab === 'profile' ? 'active' : ''}`}
+            onClick={() => {
+              setActiveTab('profile');
+              setIsSidebarOpenMobile(false);
+            }}
+            id="sidebar-link-admin-profile"
+          >
+            <UserRound size={18} />
+            <span className="nav-item-label">Profil Admin</span>
+          </button>
+
           <div className="nav-section-title" style={{ marginTop: '1.25rem' }}>Akses Cepat</div>
 
           <button
@@ -290,7 +438,9 @@ export const AdminDashboard = ({
               <ShieldCheck size={18} color="#10b981" />
             </div>
             <div className="user-info">
-              <strong className="user-name">{adminUser?.name || 'Store Owner'}</strong>
+              <strong className="user-name">
+                {adminUser?.name || storeSettings?.ownerName || 'Admin Toko'}
+              </strong>
               <span className="user-email">{adminUser?.email || 'admin@katalogwa.com'}</span>
             </div>
           </div>
@@ -324,11 +474,21 @@ export const AdminDashboard = ({
             <div>
               <h2 className="viewport-title">
                 {activeTab === 'products' && 'Manajemen Produk Katalog'}
+                {activeTab === 'orders' && 'Riwayat Pemesanan'}
                 {activeTab === 'categories' && 'Manajemen Kategori'}
                 {activeTab === 'settings' && 'Pengaturan Toko & Nomor WhatsApp'}
+                {activeTab === 'profile' && 'Profil Admin'}
               </h2>
               <span className="viewport-breadcrumb">
-                Admin Panel / {activeTab === 'products' ? 'Produk' : activeTab === 'categories' ? 'Kategori' : 'Pengaturan'}
+                Admin Panel / {activeTab === 'products'
+                  ? 'Produk'
+                  : activeTab === 'orders'
+                  ? 'Riwayat Pemesanan'
+                  : activeTab === 'categories'
+                  ? 'Kategori'
+                  : activeTab === 'settings'
+                  ? 'Pengaturan'
+                  : 'Profil Admin'}
               </span>
             </div>
           </div>
@@ -391,6 +551,12 @@ export const AdminDashboard = ({
              =========================================================== */}
           {activeTab === 'products' && (
             <div className="admin-tab-content animate-fade-in">
+              {productSuccess && (
+                <div className="form-alert-success animate-fade-in" role="status" style={{ marginBottom: '1rem' }}>
+                  <Check size={18} />
+                  <span>{productSuccess}</span>
+                </div>
+              )}
               <div className="table-controls-bar">
                 <div className="table-search-group">
                   <div className="search-input-wrapper" style={{ width: '280px' }}>
@@ -437,7 +603,7 @@ export const AdminDashboard = ({
                       <th>Nama & Deskripsi</th>
                       <th>Kategori</th>
                       <th>Harga</th>
-                      <th style={{ textAlign: 'center' }}>Status Stok (Saklar)</th>
+                      <th style={{ textAlign: 'center' }}>Jumlah Stok</th>
                       <th style={{ textAlign: 'right' }}>Aksi</th>
                     </tr>
                   </thead>
@@ -450,18 +616,17 @@ export const AdminDashboard = ({
                       </tr>
                     ) : (
                       filteredProducts.map((prod) => {
-                        const isAvailable = prod.stockStatus === 'Tersedia';
                         return (
-                          <tr key={prod.id} className={!isAvailable ? 'row-out-of-stock' : ''}>
+                          <tr key={prod.id}>
                             {/* Image */}
                             <td style={{ width: '64px' }}>
                               <img
-                                src={prod.image}
+                                src={getProductImageUrl(prod)}
                                 alt={prod.name}
                                 className="table-product-thumb"
                                 onError={(e) => {
                                   e.target.onerror = null;
-                                  e.target.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80';
+                                  e.target.src = DEFAULT_PRODUCT_IMAGE;
                                 }}
                               />
                             </td>
@@ -488,21 +653,9 @@ export const AdminDashboard = ({
                               </strong>
                             </td>
 
-                            {/* Toggle Stock Switch */}
+                            {/* Stock quantity is edited in the product form */}
                             <td style={{ textAlign: 'center' }}>
-                              <div className="stock-toggle-cell">
-                                <label className="switch" title="Ubah status ketersediaan stok di SQL database">
-                                  <input
-                                    type="checkbox"
-                                    checked={isAvailable}
-                                    onChange={() => handleToggleStock(prod.id)}
-                                  />
-                                  <span className="slider"></span>
-                                </label>
-                                <span className={`stock-text-status ${isAvailable ? 'text-emerald' : 'text-danger'}`}>
-                                  {prod.stockStatus}
-                                </span>
-                              </div>
+                              <span className="stock-quantity-value">{Number(prod.stockQuantity) || 0} unit</span>
                             </td>
 
                             {/* Actions */}
@@ -528,6 +681,118 @@ export const AdminDashboard = ({
                         );
                       })
                     )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'orders' && (
+            <div className="admin-tab-content animate-fade-in">
+              <div className="table-controls-bar">
+                <div>
+                  <h3 className="box-title">Daftar Pesanan ({filteredOrders.length})</h3>
+                  <p className="box-subtitle">Data pesanan tersimpan dari checkout keranjang dan pesan langsung.</p>
+                </div>
+                <div className="table-search-group">
+                  <input
+                    className="form-input"
+                    type="search"
+                    placeholder="Cari pemesan, produk, atau ID..."
+                    value={orderSearch}
+                    onChange={(event) => setOrderSearch(event.target.value)}
+                    aria-label="Cari riwayat pemesanan"
+                  />
+                  <select
+                    className="form-select filter-select"
+                    value={orderStatusFilter}
+                    onChange={(event) => setOrderStatusFilter(event.target.value)}
+                    aria-label="Filter status pesanan"
+                  >
+                    <option value="">Semua Status</option>
+                    {ORDER_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
+                  </select>
+                  <button className="btn btn-secondary btn-sm" type="button" onClick={loadOrders} disabled={isLoadingOrders}>
+                    <RefreshCw size={15} />
+                    <span>{isLoadingOrders ? 'Memuat...' : 'Muat Ulang'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {ordersError && (
+                <div className="form-alert-error" role="alert" style={{ marginBottom: '1rem' }}>
+                  <AlertCircle size={16} />
+                  <span>{ordersError}</span>
+                </div>
+              )}
+
+              <div className="table-container">
+                <table className="admin-table order-history-table">
+                  <thead>
+                    <tr>
+                      <th>Waktu / ID Pesanan</th>
+                      <th>Data Pemesan</th>
+                      <th>Produk & Catatan</th>
+                      <th>Total</th>
+                      <th>Status Pesanan</th>
+                      <th>Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {isLoadingOrders && orders.length === 0 ? (
+                      <tr><td colSpan="6" className="table-empty-cell">Memuat riwayat pemesanan...</td></tr>
+                    ) : filteredOrders.length === 0 ? (
+                      <tr>
+                        <td colSpan="6" className="table-empty-cell">
+                          {orders.length ? 'Tidak ada pesanan sesuai pencarian atau filter.' : 'Belum ada riwayat pemesanan.'}
+                        </td>
+                      </tr>
+                    ) : filteredOrders.map((order) => (
+                      <tr key={order.id}>
+                        <td>
+                          <strong className="table-product-name">{formatOrderDate(order.createdAt)}</strong>
+                          <small className="order-id">{order.id}</small>
+                        </td>
+                        <td>
+                          <strong>{order.customerName}</strong>
+                          {order.customerPhone && <small className="order-detail">{order.customerPhone}</small>}
+                        </td>
+                        <td>
+                          <ul className="order-item-lines">
+                            {order.items.map((item) => (
+                              <li key={`${order.id}-${item.productId}`}>
+                                {item.productName} × {item.quantity} — {formatRupiah(item.lineTotal)}
+                              </li>
+                            ))}
+                          </ul>
+                          {order.customerNotes && <small className="order-detail">Catatan/alamat: {order.customerNotes}</small>}
+                        </td>
+                        <td><strong className="table-product-price">{formatRupiah(order.total)}</strong></td>
+                        <td>
+                          <select
+                            className="form-select order-status-select"
+                            value={order.status}
+                            onChange={(event) => handleOrderStatusChange(order.id, event.target.value)}
+                            disabled={savingOrderId === order.id}
+                            aria-label={`Status pesanan ${order.id}`}
+                          >
+                            {ORDER_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
+                          </select>
+                          {savingOrderId === order.id && <small className="order-detail">Menyimpan status...</small>}
+                        </td>
+                        <td>
+                          <button
+                            className="btn-icon btn-icon-danger"
+                            type="button"
+                            onClick={() => setDeletingOrder(order)}
+                            title={`Hapus riwayat pesanan ${order.id}`}
+                            aria-label={`Hapus riwayat pesanan ${order.id}`}
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
@@ -560,7 +825,7 @@ export const AdminDashboard = ({
                       <input
                         type="text"
                         className="form-input"
-                        placeholder="cth: Paket Hemat, Minuman Boba..."
+                        placeholder="cth: Sparepart Racing, Oli..."
                         value={newCatName}
                         onChange={(e) => setNewCatName(e.target.value)}
                         required
@@ -644,7 +909,7 @@ export const AdminDashboard = ({
               <div className="card-box" style={{ maxWidth: '640px' }}>
                 <h3 className="box-title">Pengaturan Profil & WhatsApp Toko</h3>
                 <p className="box-subtitle">
-                  Konfigurasi disimpan di tabel SQL <code>settings</code>. Digunakan untuk redirect WhatsApp pesanan pelanggan.
+                  Nama toko dan nama pemilik disimpan terpisah di tabel SQL <code>settings</code>.
                 </p>
 
                 {settingsSuccess && (
@@ -656,12 +921,27 @@ export const AdminDashboard = ({
 
                 <form onSubmit={handleSaveSettings}>
                   <div className="form-group">
-                    <label className="form-label">Nama Bisnis / Toko</label>
+                    <label className="form-label">Nama Brand Dashboard / Bisnis</label>
                     <input
                       type="text"
                       className="form-input"
                       value={settingsForm.storeName}
+                      placeholder="BYY MOTORCYCLE"
                       onChange={(e) => setSettingsForm({ ...settingsForm, storeName: e.target.value })}
+                      required
+                    />
+                    <small style={{ color: 'var(--slate-500)', marginTop: '0.2rem' }}>
+                      Nama ini ditampilkan di dashboard dan katalog, lalu tersimpan sebagai nama toko.
+                    </small>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Nama Pemilik / Admin Toko</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={settingsForm.ownerName}
+                      onChange={(e) => setSettingsForm({ ...settingsForm, ownerName: e.target.value })}
                       required
                     />
                   </div>
@@ -712,12 +992,100 @@ export const AdminDashboard = ({
               </div>
             </div>
           )}
+
+          {activeTab === 'profile' && (
+            <div className="admin-tab-content animate-fade-in">
+              <div className="card-box" style={{ maxWidth: '640px' }}>
+                <h3 className="box-title">Edit Profil Admin</h3>
+                <p className="box-subtitle">
+                  Perbarui nama pengguna, email, atau password akun admin. Password saat ini diperlukan untuk mengonfirmasi perubahan.
+                </p>
+
+                {profileSuccess && (
+                  <div className="form-alert-success animate-fade-in" role="status" style={{ marginBottom: '1rem' }}>
+                    <Check size={18} />
+                    <span>{profileSuccess}</span>
+                  </div>
+                )}
+                {profileError && (
+                  <div className="form-alert-error animate-fade-in" role="alert" style={{ marginBottom: '1rem' }}>
+                    <AlertCircle size={18} />
+                    <span>{profileError}</span>
+                  </div>
+                )}
+
+                <form onSubmit={handleSaveAdminProfile}>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="admin-profile-name">Nama Pengguna Admin</label>
+                    <input
+                      id="admin-profile-name"
+                      type="text"
+                      className="form-input"
+                      autoComplete="name"
+                      value={profileForm.name}
+                      onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
+                      required
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="admin-profile-email">Email</label>
+                    <input
+                      id="admin-profile-email"
+                      type="email"
+                      className="form-input"
+                      autoComplete="email"
+                      value={profileForm.email}
+                      onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
+                      required
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="admin-profile-current-password">Password Saat Ini</label>
+                    <input
+                      id="admin-profile-current-password"
+                      type="password"
+                      className="form-input"
+                      autoComplete="current-password"
+                      value={profileForm.currentPassword}
+                      onChange={(e) => setProfileForm({ ...profileForm, currentPassword: e.target.value })}
+                      required
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="admin-profile-new-password">Password Admin Baru (opsional)</label>
+                    <input
+                      id="admin-profile-new-password"
+                      type="password"
+                      className="form-input"
+                      autoComplete="new-password"
+                      minLength={8}
+                      placeholder="Minimal 8 karakter"
+                      value={profileForm.newPassword}
+                      onChange={(e) => setProfileForm({ ...profileForm, newPassword: e.target.value })}
+                    />
+                    <small style={{ color: 'var(--slate-500)', marginTop: '0.2rem' }}>
+                      Kosongkan jika tidak ingin mengganti password.
+                    </small>
+                  </div>
+
+                  <button type="submit" className="btn btn-primary" style={{ marginTop: '0.5rem' }} disabled={isSavingProfile}>
+                    <Save size={16} />
+                    <span>{isSavingProfile ? 'Menyimpan...' : 'Simpan Profil Admin'}</span>
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
         </main>
       </div>
 
       {/* Product Form Modal (Add / Edit) */}
       {isProductModalOpen && (
         <ProductFormModal
+          key={editingProduct?.id || 'new-product'}
           onClose={() => setIsProductModalOpen(false)}
           onSave={handleSaveProduct}
           editingProduct={editingProduct}
@@ -743,6 +1111,15 @@ export const AdminDashboard = ({
         onConfirm={handleConfirmDeleteCategory}
         onCancel={() => setDeletingCategory(null)}
         confirmText="Hapus Kategori"
+      />
+
+      <ConfirmModal
+        isOpen={!!deletingOrder}
+        title="Hapus Riwayat Pesanan?"
+        message={`Apakah Anda yakin ingin menghapus pesanan ${deletingOrder?.id} atas nama ${deletingOrder?.customerName}? Data ini tidak dapat dipulihkan.`}
+        onConfirm={handleConfirmDeleteOrder}
+        onCancel={() => setDeletingOrder(null)}
+        confirmText="Hapus Riwayat"
       />
     </div>
   );

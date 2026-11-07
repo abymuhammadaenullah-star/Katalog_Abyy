@@ -1,43 +1,57 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { X, Upload, Image as ImageIcon, Save, AlertCircle } from 'lucide-react';
-
-const PRESET_FOOD_IMAGES = [
-  { label: 'Nasi Goreng', url: 'https://images.unsplash.com/photo-1603133872878-684f208fb84b?auto=format&fit=crop&w=800&q=80' },
-  { label: 'Ayam Bakar', url: 'https://images.unsplash.com/photo-1598515214211-89d3c73ae83b?auto=format&fit=crop&w=800&q=80' },
-  { label: 'Kopi Susu', url: 'https://images.unsplash.com/photo-1517256064527-09c73fc73e38?auto=format&fit=crop&w=800&q=80' },
-  { label: 'Matcha Frappe', url: 'https://images.unsplash.com/photo-1536256263959-770b48d82b0a?auto=format&fit=crop&w=800&q=80' },
-  { label: 'Pisang Keju', url: 'https://images.unsplash.com/photo-1587314168485-3236d6710814?auto=format&fit=crop&w=800&q=80' },
-  { label: 'Dimsum Mentai', url: 'https://images.unsplash.com/photo-1496116218417-1a781b1c416c?auto=format&fit=crop&w=800&q=80' }
-];
+import { DEFAULT_PRODUCT_IMAGE, getProductImageUrl } from '../services/productImages';
 
 export const ProductFormModal = ({ onClose, onSave, editingProduct, categories }) => {
-  const initialImage = editingProduct?.image || PRESET_FOOD_IMAGES[0].url;
   const [name, setName] = useState(editingProduct?.name || '');
   const [categoryId, setCategoryId] = useState(editingProduct?.categoryId || categories[0]?.id || '');
   const [price, setPrice] = useState(editingProduct?.price ? String(editingProduct.price) : '');
+  const [stockQuantity, setStockQuantity] = useState(String(editingProduct?.stockQuantity ?? 0));
   const [stockStatus, setStockStatus] = useState(editingProduct?.stockStatus || 'Tersedia');
   const [description, setDescription] = useState(editingProduct?.description || '');
-  const [imageUrl, setImageUrl] = useState(initialImage);
   const [selectedFile, setSelectedFile] = useState(null);
-  const [previewSrc, setPreviewSrc] = useState(initialImage);
+  const fileInputRef = useRef(null);
+  const [previewSrc, setPreviewSrc] = useState(
+    editingProduct ? getProductImageUrl(editingProduct) : DEFAULT_PRODUCT_IMAGE
+  );
+  const [previewError, setPreviewError] = useState('');
+  const [removeImage, setRemoveImage] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => () => {
+    if (previewSrc.startsWith('blob:')) URL.revokeObjectURL(previewSrc);
+  }, [previewSrc]);
 
   // Handle file picker
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        setErrorMsg('Ukuran gambar maksimal 5 MB.');
+        e.target.value = '';
+        return;
+      }
+
+      setErrorMsg('');
       setSelectedFile(file);
-      const objectUrl = URL.createObjectURL(file);
-      setPreviewSrc(objectUrl);
+      setRemoveImage(false);
+      setPreviewError('');
+      setPreviewSrc(URL.createObjectURL(file));
     }
+    e.target.value = '';
   };
 
-  // Handle preset image click
-  const handleSelectPreset = (url) => {
+  const handleRemoveImage = () => {
     setSelectedFile(null);
-    setImageUrl(url);
-    setPreviewSrc(url);
+    setRemoveImage(true);
+    setPreviewError('');
+    setPreviewSrc(DEFAULT_PRODUCT_IMAGE);
+  };
+
+  const handlePreviewError = () => {
+    setPreviewError('Gambar tidak dapat dimuat. Pilih gambar lain atau periksa file/path gambar.');
+    if (previewSrc !== DEFAULT_PRODUCT_IMAGE) setPreviewSrc(DEFAULT_PRODUCT_IMAGE);
   };
 
   const handleSubmit = async (e) => {
@@ -56,28 +70,22 @@ export const ProductFormModal = ({ onClose, onSave, editingProduct, categories }
       setErrorMsg('Harga produk harus angka positif.');
       return;
     }
+    if (!Number.isSafeInteger(Number(stockQuantity)) || Number(stockQuantity) < 0) {
+      setErrorMsg('Jumlah stok harus bilangan bulat minimal 0.');
+      return;
+    }
 
     setIsSubmitting(true);
     try {
-      let payload;
-      if (selectedFile) {
-        payload = new FormData();
-        payload.append('name', name.trim());
-        payload.append('categoryId', categoryId);
-        payload.append('price', price);
-        payload.append('stockStatus', stockStatus);
-        payload.append('description', description.trim());
-        payload.append('photo', selectedFile);
-      } else {
-        payload = {
-          name: name.trim(),
-          categoryId,
-          price: Number(price),
-          stockStatus,
-          description: description.trim(),
-          imageUrl: previewSrc || imageUrl
-        };
-      }
+      const payload = new FormData();
+      payload.append('name', name.trim());
+      payload.append('categoryId', categoryId);
+      payload.append('price', price);
+      payload.append('stockQuantity', stockQuantity);
+      payload.append('stockStatus', stockStatus);
+      payload.append('description', description.trim());
+      payload.append('removeImage', removeImage ? 'true' : 'false');
+      if (selectedFile) payload.append('photo', selectedFile);
 
       await onSave(payload, editingProduct?.id);
       onClose();
@@ -101,7 +109,7 @@ export const ProductFormModal = ({ onClose, onSave, editingProduct, categories }
               {editingProduct ? 'Edit Informasi Produk' : 'Tambah Produk Baru'}
             </h2>
             <p className="modal-subtitle">
-              Lengkapi data produk untuk katalog KatalogWA
+              Lengkapi data produk untuk katalog BYY MOTORCYCLE
             </p>
           </div>
           <button className="btn-icon" onClick={onClose} title="Tutup">
@@ -121,44 +129,46 @@ export const ProductFormModal = ({ onClose, onSave, editingProduct, categories }
             {/* Product Image Preview & Selector */}
             <div className="product-form-media-section">
               <div className="media-preview-box">
-                {previewSrc ? (
-                  <img src={previewSrc} alt="Preview" className="media-preview-img" />
-                ) : (
-                  <div className="media-placeholder">
-                    <ImageIcon size={32} />
-                    <span>Belum ada foto</span>
-                  </div>
-                )}
+                <img
+                  src={previewSrc || DEFAULT_PRODUCT_IMAGE}
+                  alt={`Preview ${name || 'produk'}`}
+                  className="media-preview-img"
+                  onError={handlePreviewError}
+                />
               </div>
 
               <div className="media-controls">
-                <label className="btn btn-secondary btn-sm upload-file-btn">
-                  <Upload size={15} />
-                  <span>Upload Foto dari Perangkat</span>
+                {previewError && (
+                  <div className="form-alert-error" role="status">
+                    <AlertCircle size={16} />
+                    <span>{previewError}</span>
+                  </div>
+                )}
+                <div className="media-action-buttons">
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm upload-file-btn"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isSubmitting}
+                  >
+                    <Upload size={15} />
+                    <span>{selectedFile || (previewSrc !== DEFAULT_PRODUCT_IMAGE && !removeImage) ? 'Ganti Foto Produk' : 'Upload Foto Produk'}</span>
+                  </button>
                   <input
+                    ref={fileInputRef}
                     type="file"
-                    accept="image/*"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
                     onChange={handleFileChange}
                     style={{ display: 'none' }}
                   />
-                </label>
-
-                <div className="preset-images-row">
-                  <span className="preset-label">Atau pilih sampel cepat:</span>
-                  <div className="preset-thumbs">
-                    {PRESET_FOOD_IMAGES.map((preset, idx) => (
-                      <button
-                        type="button"
-                        key={idx}
-                        className={`preset-thumb-btn ${previewSrc === preset.url ? 'active' : ''}`}
-                        onClick={() => handleSelectPreset(preset.url)}
-                        title={preset.label}
-                      >
-                        <img src={preset.url} alt={preset.label} />
-                      </button>
-                    ))}
-                  </div>
+                  {(editingProduct && getProductImageUrl(editingProduct) !== DEFAULT_PRODUCT_IMAGE || selectedFile) && (
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={handleRemoveImage}>
+                      <ImageIcon size={15} />
+                      <span>Hapus Foto</span>
+                    </button>
+                  )}
                 </div>
+                <small className="media-help-text">Format JPG, PNG, WEBP, atau GIF. Maksimal 5 MB.</small>
               </div>
             </div>
 
@@ -171,7 +181,7 @@ export const ProductFormModal = ({ onClose, onSave, editingProduct, categories }
               <input
                 type="text"
                 className="form-input"
-                placeholder="cth: Nasi Goreng Spesial"
+                placeholder="cth: Kampas Rem Racing"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
@@ -217,51 +227,48 @@ export const ProductFormModal = ({ onClose, onSave, editingProduct, categories }
               </div>
             </div>
 
-            {/* Stock Status Selector */}
-            <div className="form-group">
-              <label className="form-label">
-                <span>Status Stok</span>
-              </label>
-              <div className="stock-radio-group">
-                <label className={`stock-radio-card ${stockStatus === 'Tersedia' ? 'selected' : ''}`}>
-                  <input
-                    type="radio"
-                    name="stockStatus"
-                    value="Tersedia"
-                    checked={stockStatus === 'Tersedia'}
-                    onChange={() => setStockStatus('Tersedia')}
-                  />
-                  <div>
-                    <strong>Tersedia</strong>
-                    <p>Produk dapat dipesan pelanggan via WhatsApp</p>
-                  </div>
-                </label>
+            <div className="form-row-2">
+              <div className="form-group">
+                <label className="form-label" htmlFor="product-stock-quantity">Jumlah Stok (unit)</label>
+                <input
+                  id="product-stock-quantity"
+                  type="number"
+                  className="form-input"
+                  min="0"
+                  step="1"
+                  value={stockQuantity}
+                  onChange={(event) => setStockQuantity(event.target.value)}
+                  required
+                />
+              </div>
 
-                <label className={`stock-radio-card ${stockStatus === 'Habis' ? 'selected-out' : ''}`}>
-                  <input
-                    type="radio"
-                    name="stockStatus"
-                    value="Habis"
-                    checked={stockStatus === 'Habis'}
-                    onChange={() => setStockStatus('Habis')}
-                  />
-                  <div>
-                    <strong>Habis</strong>
-                    <p>Tombol pemesanan dinonaktifkan di katalog</p>
-                  </div>
-                </label>
+              <div className="form-group">
+                <label className="form-label" htmlFor="product-stock-status">Status Ketersediaan</label>
+                <select
+                  id="product-stock-status"
+                  className="form-select"
+                  value={stockStatus}
+                  onChange={(event) => setStockStatus(event.target.value)}
+                  required
+                >
+                  <option value="Tersedia">Tersedia</option>
+                  <option value="Habis">Habis</option>
+                </select>
               </div>
             </div>
+            <small className="media-help-text">
+              Ubah jumlah dan status stok melalui formulir ini. Tabel produk hanya menampilkan jumlah stok.
+            </small>
 
             {/* Description */}
             <div className="form-group">
               <label className="form-label">
-                <span>Deskripsi Menu</span>
+                <span>Deskripsi Produk</span>
               </label>
               <textarea
                 rows="2"
                 className="form-textarea"
-                placeholder="Jelaskan bumbu, bahan, porsi, atau keunikan rasa menu ini..."
+                placeholder="Jelaskan kondisi, kompatibilitas, atau keunggulan produk ini..."
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
               />

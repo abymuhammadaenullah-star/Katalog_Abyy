@@ -67,7 +67,7 @@ export const Header = ({
           {navigation.map(([label, href]) => (
             <a key={href} href={href} onClick={closeMenu}>{label}</a>
           ))}
-          {whatsappUrl && (
+          {/* {whatsappUrl && (
             <a
               className="header-contact-link"
               href={whatsappUrl}
@@ -77,12 +77,12 @@ export const Header = ({
             >
               <MessageCircle size={16} /> Hubungi Kami
             </a>
-          )}
+          )}  */}
           {adminUser ? (
             <div className="admin-status-bar">
               <span className="admin-badge">
                 <span className="admin-dot" />
-                Admin: {adminUser.name || 'Owner'}
+                Admin: {adminUser.name || storeSettings?.ownerName || 'Admin Toko'}
               </span>
               {isAdminView ? (
                 <button className="btn btn-secondary btn-sm" onClick={() => { setIsAdminView(false); closeMenu(); }}>

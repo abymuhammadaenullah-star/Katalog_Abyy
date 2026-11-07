@@ -1,20 +1,20 @@
 import { useState } from 'react';
-import { CheckCircle2, Eye, MessageCircle, PackageCheck, XCircle } from 'lucide-react';
-
-const isAvailable = (product) =>
-  (product.stockStatus || product.stokStatus) === 'Tersedia';
+import { CheckCircle2, Eye, MessageCircle, ShoppingCart, XCircle } from 'lucide-react';
+import { DEFAULT_PRODUCT_IMAGE, getProductImageUrl } from '../services/productImages';
+import { getProductStockQuantity } from '../services/productStock';
 
 export const ProductCard = ({
   product,
   onSelectProduct,
+  onAddToCart,
   onViewDetails,
   featured = false,
   isNew = false,
 }) => {
   const [imageFailed, setImageFailed] = useState(false);
-  const available = isAvailable(product);
-  const hasProductImage =
-    product.image && product.image !== '-' && product.image !== 'null' && !imageFailed;
+  const stockQuantity = getProductStockQuantity(product);
+  const available = (product.stockStatus || product.stokStatus) === 'Tersedia';
+  const imageUrl = imageFailed ? DEFAULT_PRODUCT_IMAGE : getProductImageUrl(product);
 
   const formatRupiah = (number) =>
     new Intl.NumberFormat('id-ID', {
@@ -26,20 +26,13 @@ export const ProductCard = ({
   return (
     <article className={`product-card ${!available ? 'out-of-stock' : ''}`} id={`product-${product.id}`}>
       <div className="product-image-box">
-        {hasProductImage ? (
-          <img
-            src={product.image}
-            alt={product.name}
-            className="product-img"
-            loading="lazy"
-            onError={() => setImageFailed(true)}
-          />
-        ) : (
-          <div className="product-image-placeholder" aria-label={`Foto ${product.name} belum tersedia`}>
-            <PackageCheck size={42} strokeWidth={1.4} />
-            <span>BYY MOTORCYCLE</span>
-          </div>
-        )}
+        <img
+          src={imageUrl}
+          alt={product.name}
+          className="product-img"
+          loading="lazy"
+          onError={() => setImageFailed(true)}
+        />
         {(featured || isNew) && (
           <div className="product-badges">
             {featured && !isNew && <span className="product-feature-tag">BYY PICK</span>}
@@ -55,6 +48,7 @@ export const ProductCard = ({
       <div className="product-content">
         <h3 className="product-title" title={product.name}>{product.name}</h3>
         <p className="product-desc">{product.description || 'Sparepart pilihan dari BYY Motorcycle Racing.'}</p>
+        <p className="product-stock-summary">Jumlah stok: {stockQuantity} unit</p>
         <div className="product-price-group">
           <span className="price-label">Harga</span>
           <span className="product-price">{formatRupiah(product.price)}</span>
@@ -67,6 +61,16 @@ export const ProductCard = ({
             aria-label={`Detail produk ${product.name}`}
           >
             <Eye size={16} /><span>Detail</span>
+          </button>
+          <button
+            className="btn btn-cart-add"
+            type="button"
+            onClick={() => onAddToCart(product)}
+            disabled={!available}
+            aria-label={`Tambah ${product.name} ke keranjang`}
+            title={available ? 'Tambah ke keranjang' : 'Stok produk habis'}
+          >
+            <ShoppingCart size={16} /><span>Keranjang</span>
           </button>
           <button
             className="btn btn-wa order-btn"

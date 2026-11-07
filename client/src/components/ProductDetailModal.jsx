@@ -1,23 +1,20 @@
 import { useState } from 'react';
-import { CheckCircle2, MessageCircle, PackageCheck, X, XCircle } from 'lucide-react';
+import { CheckCircle2, MessageCircle, ShoppingCart, X, XCircle } from 'lucide-react';
+import { DEFAULT_PRODUCT_IMAGE, getProductImageUrl } from '../services/productImages';
+import { getProductStockQuantity } from '../services/productStock';
 
-const isAvailable = (product) =>
-  (product.stockStatus || product.stokStatus) === 'Tersedia';
-
-export const ProductDetailModal = ({ product, onClose, onOrder }) => {
+export const ProductDetailModal = ({ product, onClose, onOrder, onAddToCart }) => {
   const [imageFailed, setImageFailed] = useState(false);
   if (!product) return null;
 
-  const available = isAvailable(product);
+  const stockQuantity = getProductStockQuantity(product);
+  const available = (product.stockStatus || product.stokStatus) === 'Tersedia';
   const formatRupiah = (number) =>
     new Intl.NumberFormat('id-ID', {
       style: 'currency',
       currency: 'IDR',
       minimumFractionDigits: 0,
     }).format(Number(number) || 0);
-
-  const imageIsValid =
-    product.image && product.image !== '-' && product.image !== 'null' && !imageFailed;
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -32,25 +29,29 @@ export const ProductDetailModal = ({ product, onClose, onOrder }) => {
           <X size={20} />
         </button>
         <div className="product-detail-image">
-          {imageIsValid ? (
-            <img src={product.image} alt={product.name} onError={() => setImageFailed(true)} />
-          ) : (
-            <div className="product-image-placeholder"><PackageCheck size={52} /><span>BYY MOTORCYCLE</span></div>
-          )}
+          <img
+            src={imageFailed ? DEFAULT_PRODUCT_IMAGE : getProductImageUrl(product)}
+            alt={product.name}
+            onError={() => setImageFailed(true)}
+          />
         </div>
         <div className="product-detail-content">
           <span className="product-detail-category">{product.categoryName || 'Sparepart Motor'}</span>
           <h2 id="product-detail-title">{product.name}</h2>
           <span className={`detail-stock ${available ? 'available' : 'unavailable'}`}>
             {available ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
-            {available ? 'Stok tersedia' : 'Stok sedang habis'}
+            {available ? 'Tersedia' : 'Stok sedang habis'}
           </span>
+          <p className="product-stock-summary">Jumlah stok: {stockQuantity} unit</p>
           <p className="product-detail-description">
             {product.description || 'Hubungi kami untuk informasi lebih lanjut mengenai produk ini.'}
           </p>
           <strong className="product-detail-price">{formatRupiah(product.price)}</strong>
           <div className="product-detail-actions">
             <button className="btn btn-secondary" type="button" onClick={onClose}>Kembali ke katalog</button>
+            <button className="btn btn-primary" type="button" onClick={() => onAddToCart(product)} disabled={!available}>
+              <ShoppingCart size={17} /> Tambah ke keranjang
+            </button>
             <button className="btn btn-wa" type="button" onClick={onOrder} disabled={!available}>
               <MessageCircle size={17} /> Pesan via WhatsApp
             </button>

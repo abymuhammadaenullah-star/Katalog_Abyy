@@ -3,6 +3,7 @@ import {
   ArrowRight,
   BatteryCharging,
   Check,
+  ChevronLeft,
   ChevronRight,
   CircleGauge,
   Disc3,
@@ -11,6 +12,7 @@ import {
   MessageCircle,
   RefreshCw,
   ShieldCheck,
+  ShoppingCart,
   Sparkles,
   Wrench,
 } from 'lucide-react';
@@ -18,15 +20,18 @@ import {
   clearAuthToken,
   fetchAdminProfile,
   fetchCategories,
+  createOrder,
   fetchProducts,
   fetchStoreSettings,
   getAuthToken,
+  setAuthToken,
 } from './src/services/api';
 import { AdminDashboard } from './src/components/AdminDashboard';
 import { AdminLoginModal } from './src/components/AdminLoginModel';
 import { CategoryPills } from './src/components/CategoryPills';
 import { Header } from './src/components/Header';
 import { OrderModal } from './src/components/OrderMOdal';
+import { CartModal } from './src/components/CartModal';
 import { ProductCard } from './src/components/ProductCard';
 import { ProductDetailModal } from './src/components/ProductDetailModal';
 import { SearchBar } from './src/components/SearchBar';
@@ -50,6 +55,8 @@ const isNewArrival = (product) => {
   return Number.isFinite(createdAt) && ageInDays >= 0 && ageInDays <= 30;
 };
 
+const PRODUCTS_PER_PAGE = 10;
+
 export function App() {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -58,8 +65,11 @@ export function App() {
   const [search, setSearch] = useState('');
   const [priceRange, setPriceRange] = useState('all');
   const [sortOrder, setSortOrder] = useState('recommended');
+  const [productPage, setProductPage] = useState(1);
   const [selectedProductForOrder, setSelectedProductForOrder] = useState(null);
   const [selectedProductForDetails, setSelectedProductForDetails] = useState(null);
+  const [cart, setCart] = useState([]);
+  const [isCartOpen, setIsCartOpen] = useState(false);
   const [isAdminLoginOpen, setIsAdminLoginOpen] = useState(false);
   const [isAdminView, setIsAdminView] = useState(false);
   const [adminUser, setAdminUser] = useState(null);
@@ -77,6 +87,7 @@ export function App() {
       if (storeRes?.data) setStoreSettings(storeRes.data);
     } catch (err) {
       console.error('Gagal mengambil data katalog:', err);
+      throw err;
     } finally {
       setIsLoading(false);
     }
@@ -119,6 +130,38 @@ export function App() {
     clearAuthToken();
     setAdminUser(null);
     setIsAdminView(false);
+  };
+
+  const addToCart = (product) => {
+    if (!isProductAvailable(product)) return;
+    setCart((currentCart) => {
+      const existingItem = currentCart.find((item) => item.productId === product.id);
+      if (existingItem) {
+        return currentCart.map((item) =>
+          item.productId === product.id
+            ? { ...item, quantity: item.quantity + 1 }
+            : item
+        );
+      }
+      return [...currentCart, { productId: product.id, quantity: 1 }];
+    });
+  };
+
+  const cartItems = cart
+    .map((item) => ({
+      ...item,
+      product: products.find((product) => product.id === item.productId),
+    }))
+    .filter((item) => item.product);
+
+  const updateCartQuantity = (productId, quantity) => {
+    setCart((currentCart) => currentCart.flatMap((item) => {
+      if (item.productId !== productId) return [item];
+      if (quantity < 1) return [];
+      const product = products.find((entry) => entry.id === productId);
+      if (!product) return [];
+      return [{ ...item, quantity }];
+    }));
   };
 
   const filteredProducts = useMemo(() => {
@@ -166,12 +209,29 @@ export function App() {
         .slice(0, 3),
     [products],
   );
+  const pageCount = Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE);
+  const currentProductPage = Math.min(productPage, Math.max(pageCount, 1));
+  const visibleProducts = filteredProducts.slice(
+    (currentProductPage - 1) * PRODUCTS_PER_PAGE,
+    currentProductPage * PRODUCTS_PER_PAGE,
+  );
+
+  const handleSearchChange = (value) => {
+    setSearch(value);
+    setProductPage(1);
+  };
+
+  const handleCategoryChange = (categoryId) => {
+    setActiveCategoryId(categoryId);
+    setProductPage(1);
+  };
 
   const selectShortcut = (shortcut) => {
     const match = categories.find((category) => {
       const categoryName = category.name.toLowerCase();
       return shortcut.terms.some((term) => categoryName.includes(term));
     });
+    setProductPage(1);
     setPriceRange('all');
     if (match) {
       setActiveCategoryId(match.id);
@@ -195,6 +255,10 @@ export function App() {
           categories={categories}
           storeSettings={storeSettings}
           adminUser={adminUser}
+          onAdminProfileUpdated={(result) => {
+            setAuthToken(result.token);
+            setAdminUser(result.user);
+          }}
           onRefreshData={loadData}
           onBackToCatalog={() => setIsAdminView(false)}
           onLogout={handleLogout}
@@ -317,6 +381,7 @@ export function App() {
                   <ProductCard
                     key={`featured-${product.id}`}
                     product={product}
+                    onAddToCart={addToCart}
                     featured
                     isNew={isNewArrival(product)}
                     onSelectProduct={setSelectedProductForOrder}
@@ -336,18 +401,30 @@ export function App() {
                 <h2>Sparepart pilihan, siap menemani</h2>
                 <p>Cari produk berdasarkan nama, kategori, atau kisaran harga.</p>
               </div>
-              <span className="catalog-count">{products.length} produk</span>
+              <div className="catalog-header-actions">
+                <span className="catalog-count">{products.length} produk</span>
+                <button className="btn btn-primary cart-open-button" type="button" onClick={() => setIsCartOpen(true)}>
+                  <ShoppingCart size={17} />
+                  <span>Keranjang</span>
+                  <span className="cart-item-count">
+                    {cartItems.reduce((total, item) => total + item.quantity, 0)}
+                  </span>
+                </button>
+              </div>
             </div>
             <div className="catalog-toolbar">
               <SearchBar
                 search={search}
-                setSearch={setSearch}
+                setSearch={handleSearchChange}
                 placeholder="Cari nama sparepart atau kategori..."
               />
               <div className="catalog-selects">
                 <label className="filter-control">
                   <span>Rentang harga</span>
-                  <select value={priceRange} onChange={(event) => setPriceRange(event.target.value)}>
+                  <select value={priceRange} onChange={(event) => {
+                    setPriceRange(event.target.value);
+                    setProductPage(1);
+                  }}>
                     <option value="all">Semua harga</option>
                     <option value="under-250">Di bawah Rp250.000</option>
                     <option value="250-1m">Rp250.000 – Rp1.000.000</option>
@@ -356,7 +433,10 @@ export function App() {
                 </label>
                 <label className="filter-control">
                   <span>Urutkan</span>
-                  <select value={sortOrder} onChange={(event) => setSortOrder(event.target.value)}>
+                  <select value={sortOrder} onChange={(event) => {
+                    setSortOrder(event.target.value);
+                    setProductPage(1);
+                  }}>
                     <option value="recommended">Rekomendasi</option>
                     <option value="newest">Produk terbaru</option>
                     <option value="price-asc">Harga termurah</option>
@@ -369,7 +449,7 @@ export function App() {
             <CategoryPills
               categories={categories}
               activeCategoryId={activeCategoryId}
-              onSelectCategory={setActiveCategoryId}
+              onSelectCategory={handleCategoryChange}
               totalProductsCount={products.length}
             />
 
@@ -380,12 +460,16 @@ export function App() {
               </div>
             ) : filteredProducts.length > 0 ? (
               <>
-                <p className="results-caption">Menampilkan {filteredProducts.length} produk</p>
+                <p className="results-caption">
+                  Menampilkan {(currentProductPage - 1) * PRODUCTS_PER_PAGE + 1}–
+                  {Math.min(currentProductPage * PRODUCTS_PER_PAGE, filteredProducts.length)} dari {filteredProducts.length} produk
+                </p>
                 <div className="catalog-grid">
-                  {filteredProducts.map((product) => (
+                  {visibleProducts.map((product) => (
                     <ProductCard
                       key={product.id}
                       product={product}
+                      onAddToCart={addToCart}
                       featured={featuredProducts.some((item) => item.id === product.id)}
                       isNew={isNewArrival(product)}
                       onSelectProduct={setSelectedProductForOrder}
@@ -393,6 +477,33 @@ export function App() {
                     />
                   ))}
                 </div>
+                {pageCount > 1 && (
+                  <nav className="product-pagination" aria-label="Halaman produk">
+                    <button
+                      className="product-page-button"
+                      type="button"
+                      aria-label="Halaman sebelumnya"
+                      disabled={currentProductPage === 1}
+                      onClick={() => setProductPage(currentProductPage - 1)}
+                    >
+                      <ChevronLeft size={17} />
+                      <span>Sebelumnya</span>
+                    </button>
+                    <span className="product-page-status" aria-live="polite">
+                      Halaman {currentProductPage} dari {pageCount}
+                    </span>
+                    <button
+                      className="product-page-button"
+                      type="button"
+                      aria-label="Halaman berikutnya"
+                      disabled={currentProductPage >= pageCount}
+                      onClick={() => setProductPage(currentProductPage + 1)}
+                    >
+                      <span>Berikutnya</span>
+                      <ChevronRight size={17} />
+                    </button>
+                  </nav>
+                )}
               </>
             ) : (
               <div className="catalog-empty-state">
@@ -407,6 +518,7 @@ export function App() {
                     setSearch('');
                     setActiveCategoryId('*');
                     setPriceRange('all');
+                    setProductPage(1);
                   }}
                   type="button"
                 >
@@ -498,13 +610,28 @@ export function App() {
         <OrderModal
           product={selectedProductForOrder}
           storeSettings={storeSettings}
+          onCreateOrder={createOrder}
           onClose={() => setSelectedProductForOrder(null)}
+        />
+      )}
+      {isCartOpen && (
+        <CartModal
+          items={cartItems}
+          storeSettings={storeSettings}
+          onCreateOrder={createOrder}
+          onClose={() => setIsCartOpen(false)}
+          onQuantityChange={updateCartQuantity}
+          onRemoveItem={(productId) => updateCartQuantity(productId, 0)}
         />
       )}
       {selectedProductForDetails && (
         <ProductDetailModal
           product={selectedProductForDetails}
           onClose={() => setSelectedProductForDetails(null)}
+          onAddToCart={(product) => {
+            addToCart(product);
+            setSelectedProductForDetails(null);
+          }}
           onOrder={() => {
             setSelectedProductForOrder(selectedProductForDetails);
             setSelectedProductForDetails(null);

@@ -87,6 +87,39 @@ export const fetchProducts = async ({ categoryId = '', search = '' } = {}) => {
   return handleResponse(res);
 };
 
+export const createOrder = async (order) => {
+  const res = await fetch(`${API_BASE}/orders`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(order)
+  });
+  return handleResponse(res);
+};
+
+export const fetchOrders = async () => {
+  const res = await fetch(`${API_BASE}/orders`, {
+    headers: getHeaders()
+  });
+  return handleResponse(res);
+};
+
+export const updateOrderStatus = async (id, status) => {
+  const res = await fetch(`${API_BASE}/orders/${encodeURIComponent(id)}/status`, {
+    method: 'PATCH',
+    headers: getHeaders(),
+    body: JSON.stringify({ status })
+  });
+  return handleResponse(res);
+};
+
+export const deleteOrder = async (id) => {
+  const res = await fetch(`${API_BASE}/orders/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: getHeaders()
+  });
+  return handleResponse(res);
+};
+
 export const createProduct = async (formData) => {
   const isFormData = formData instanceof FormData;
   const res = await fetch(`${API_BASE}/products`, {
@@ -136,6 +169,15 @@ export const loginAdmin = async (email, password) => {
 export const fetchAdminProfile = async () => {
   const res = await fetch(`${API_BASE}/auth/me`, {
     headers: getHeaders()
+  });
+  return handleResponse(res);
+};
+
+export const updateAdminProfile = async (profile) => {
+  const res = await fetch(`${API_BASE}/auth/profile`, {
+    method: 'PUT',
+    headers: getHeaders(),
+    body: JSON.stringify(profile)
   });
   return handleResponse(res);
 };

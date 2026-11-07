@@ -1,16 +1,21 @@
 import { useState } from 'react';
 import { X, MessageCircle, AlertCircle, Send } from 'lucide-react';
+import { DEFAULT_PRODUCT_IMAGE, getProductImageUrl } from '../services/productImages';
+import { getProductStockQuantity } from '../services/productStock';
 
-export const OrderModal = ({ product, storeSettings, onClose }) => {
+export const OrderModal = ({ product, storeSettings, onClose, onCreateOrder }) => {
   const [customerName, setCustomerName] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
   const [customerNotes, setCustomerNotes] = useState('');
   const [quantity, setQuantity] = useState(1);
   const [showError, setShowError] = useState(false);
+  const [submissionError, setSubmissionError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!product) return null;
 
   const storeName = storeSettings?.storeName || 'Toko Berkah Nusantara';
-  const storePhone = (storeSettings?.phone || '6281234567890').replace(/[^0-9]/g, '');
+  const storePhone = (storeSettings?.phone || '').replace(/[^0-9]/g, '');
 
   const formatRupiah = (num) => {
     return new Intl.NumberFormat('id-ID', {
@@ -23,41 +28,65 @@ export const OrderModal = ({ product, storeSettings, onClose }) => {
   const totalPrice = (product.price || 0) * quantity;
 
   // Build formatted WhatsApp message
-  const generateMessage = () => {
+  const generateMessage = (orderId = '[Nomor Pesanan]', savedOrder = null) => {
     const nameStr = customerName.trim() || '[Nama Pemesan]';
     const notesStr = customerNotes.trim() ? customerNotes.trim() : '-';
+    const savedItem = savedOrder?.items?.[0];
 
     return `Halo ${storeName}, saya ${nameStr} ingin memesan:
-- Produk: ${product.name}
-- Jumlah: ${quantity} item
-- Total: ${formatRupiah(totalPrice)}
+- No. Pesanan: ${orderId}
+- Produk: ${savedItem?.productName || product.name}
+- Jumlah: ${savedItem?.quantity || quantity} item
+- Total: ${formatRupiah(savedOrder?.total ?? totalPrice)}
+- No. HP: ${customerPhone.trim() || '-'}
 - Catatan / Alamat: ${notesStr}
 
 Mohon diproses ya, terima kasih!`;
   };
 
   // Handle WhatsApp submission with validation check
-  const handleSubmitOrder = (e) => {
+  const handleSubmitOrder = async (e) => {
     e.preventDefault();
 
     // Decision: Is Form Complete?
     if (!customerName.trim()) {
       setShowError(true);
-      const input = document.getElementById('customer-name-input');
-      if (input) input.focus();
+      if (!customerName.trim()) document.getElementById('customer-name-input')?.focus();
+      return;
+    }
+
+    if (!storePhone) {
+      setSubmissionError('Nomor WhatsApp toko belum diatur di dashboard.');
       return;
     }
 
     setShowError(false);
-
-    // Final clean message for redirect
-    const finalMessage = generateMessage();
-    const encodedText = encodeURIComponent(finalMessage);
-    const waUrl = `https://wa.me/${storePhone}?text=${encodedText}`;
-
-    // System Action: Redirect user directly to wa.me URL with pre-filled text
-    window.open(waUrl, '_blank', 'noopener,noreferrer');
-    onClose();
+    setSubmissionError('');
+    setIsSubmitting(true);
+    const whatsappWindow = window.open('about:blank', '_blank');
+    try {
+      const response = await onCreateOrder({
+        customerName: customerName.trim(),
+        customerPhone: customerPhone.trim(),
+        customerNotes: customerNotes.trim(),
+        items: [{ productId: product.id, quantity }],
+      });
+      const finalMessage = generateMessage(response.data.id, response.data);
+      const encodedText = encodeURIComponent(finalMessage);
+      const whatsappUrl = `https://wa.me/${storePhone}?text=${encodedText}`;
+      if (whatsappWindow) {
+        whatsappWindow.opener = null;
+        whatsappWindow.location.href = whatsappUrl;
+      } else {
+        window.location.assign(whatsappUrl);
+      }
+      onClose();
+    } catch (error) {
+      whatsappWindow?.close();
+      setSubmissionError(error.message || 'Gagal menyimpan pesanan. Silakan coba lagi.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -84,9 +113,13 @@ Mohon diproses ya, terima kasih!`;
             {/* Selected Product Summary Box */}
             <div className="order-product-summary">
               <img
-                src={product.image}
+                src={getProductImageUrl(product)}
                 alt={product.name}
                 className="summary-img"
+                onError={(event) => {
+                  event.currentTarget.onerror = null;
+                  event.currentTarget.src = DEFAULT_PRODUCT_IMAGE;
+                }}
               />
               <div className="summary-details">
                 <span className="summary-category">{product.categoryName}</span>
@@ -111,6 +144,9 @@ Mohon diproses ya, terima kasih!`;
                     </button>
                   </div>
                 </div>
+                <small className="order-stock-note">
+                  Jumlah stok tercatat: {getProductStockQuantity(product)} unit
+                </small>
               </div>
             </div>
 
@@ -125,6 +161,12 @@ Mohon diproses ya, terima kasih!`;
               <div className="form-alert-error animate-fade-in" id="name-validation-alert">
                 <AlertCircle size={18} />
                 <span>Nama pemesan wajib diisi untuk memesan via WhatsApp.</span>
+              </div>
+            )}
+            {submissionError && (
+              <div className="form-alert-error animate-fade-in" role="alert" style={{ marginBottom: '1rem' }}>
+                <AlertCircle size={18} />
+                <span>{submissionError}</span>
               </div>
             )}
 
@@ -145,6 +187,18 @@ Mohon diproses ya, terima kasih!`;
                   if (e.target.value.trim()) setShowError(false);
                 }}
                 autoFocus
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label" htmlFor="customer-phone-input">Nomor HP / WhatsApp (opsional)</label>
+              <input
+                id="customer-phone-input"
+                type="tel"
+                className="form-input"
+                placeholder="Nomor yang bisa dihubungi"
+                value={customerPhone}
+                onChange={(e) => setCustomerPhone(e.target.value)}
               />
             </div>
 
@@ -185,9 +239,10 @@ Mohon diproses ya, terima kasih!`;
               type="submit"
               className="btn btn-wa"
               id="submit-wa-order-btn"
+              disabled={isSubmitting}
             >
               <Send size={16} />
-              <span>Kirim Pesanan ke WhatsApp</span>
+              <span>{isSubmitting ? 'Menyimpan pesanan...' : 'Kirim Pesanan ke WhatsApp'}</span>
             </button>
           </div>
         </form>

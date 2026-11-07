@@ -8,6 +8,7 @@ import authRoutes from './routes/auth.js';
 import categoryRoutes from './routes/categories.js';
 import productRoutes from './routes/products.js';
 import storeRoutes from './routes/stores.js';
+import orderRoutes from './routes/orders.js';
 
 dotenv.config();
 
@@ -28,13 +29,14 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Serve static uploaded files
-const uploadsPath = path.join(__dirname, '../uploads');
+const uploadsPath = path.join(__dirname, 'uploads/images');
 app.use('/uploads', express.static(uploadsPath));
 
 // API Route
 app.use('/api/auth', authRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/products', productRoutes);
+app.use('/api/orders', orderRoutes);
 app.use('/api/stores', storeRoutes);
 app.use('/api/store', storeRoutes);
 
@@ -54,6 +56,7 @@ app.get('/', (req, res) => {
             auth: '/api/auth/login',
             categories: '/api/categories',
             products: '/api/products',
+            orders: '/api/orders',
             store: '/api/stores',
             health: '/api/health'
         }

@@ -26,18 +26,24 @@ router.get('/', (req, res) => {
 // PUT update store settings (admin protected)
 router.put('/', authenticateToken, (req, res) => {
     try {
-        const { storeName, tagline, phone, address } = req.body;
+        const { storeName, ownerName, tagline, phone, address } = req.body;
+
+        if (ownerName !== undefined && (typeof ownerName !== 'string' || !ownerName.trim())) {
+            return res.status(400).json({
+                success: false,
+                message: 'Nama pemilik/admin toko wajib diisi'
+            });
+        }
 
         const current = db.getSettings();
 
         const updated = db.updateSettings({
-            storeName: storeName || current.storeName,
-            tagline: tagline || current.tagline,
-            phone: phone
-                ? phone.replace(/[^0-9]/g, '')
-                : current.phone,
+            storeName: storeName !== undefined ? storeName.trim() : current.storeName,
+            ownerName: ownerName !== undefined ? ownerName.trim() : current.ownerName,
+            tagline: tagline !== undefined ? tagline.trim() : current.tagline,
+            phone: phone !== undefined ? phone.replace(/[^0-9]/g, '') : current.phone,
             address: address !== undefined
-                ? address
+                ? address.trim()
                 : current.address
         });
 
@@ -57,4 +63,3 @@ router.put('/', authenticateToken, (req, res) => {
 });
 
 export default router;
-

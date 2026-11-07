@@ -64,5 +64,74 @@ router.get('/me', authenticateToken, (req, res) => {
     });
 });
 
-export default router;
+// Update current admin profile
+router.put('/profile', authenticateToken, (req, res, next) => {
+    const { name, email, currentPassword, newPassword } = req.body;
+    const admin = db.getAdmin();
 
+    if (!admin || admin.id !== req.user.id) {
+        return res.status(401).json({ success: false, message: 'Sesi admin tidak valid' });
+    }
+    if (
+        typeof name !== 'string' ||
+        !name.trim() ||
+        name.trim().length > 100 ||
+        typeof email !== 'string' ||
+        !email.trim() ||
+        email.trim().length > 254 ||
+        typeof currentPassword !== 'string' ||
+        !currentPassword ||
+        (newPassword !== undefined && typeof newPassword !== 'string')
+    ) {
+        return res.status(400).json({
+            success: false,
+            message: 'Nama, email, dan password saat ini wajib diisi dengan format yang valid'
+        });
+    }
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+        return res.status(400).json({ success: false, message: 'Format email tidak valid' });
+    }
+    if (newPassword && newPassword.length < 8) {
+        return res.status(400).json({
+            success: false,
+            message: 'Password baru minimal 8 karakter'
+        });
+    }
+    if (!bcrypt.compareSync(currentPassword, admin.password)) {
+        return res.status(401).json({ success: false, message: 'Password saat ini tidak sesuai' });
+    }
+
+    const hashedPassword = newPassword
+        ? bcrypt.hashSync(newPassword, 10)
+        : admin.password;
+
+    let user;
+    try {
+        user = db.updateAdmin(admin.id, {
+            name: name.trim(),
+            email: normalizedEmail,
+            password: hashedPassword
+        });
+    } catch (error) {
+        if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+            return res.status(409).json({ success: false, message: 'Email sudah digunakan' });
+        }
+        return next(error);
+    }
+
+    const token = jwt.sign(
+        { id: user.id, email: user.email, name: user.name },
+        JWT_SECRET,
+        { expiresIn: '24h' }
+    );
+
+    return res.json({
+        success: true,
+        message: 'Profil admin berhasil diperbarui',
+        token,
+        user
+    });
+});
+
+export default router;
